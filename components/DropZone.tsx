@@ -1,7 +1,5 @@
-
-
 import React, { useState, useRef } from 'react';
-import type { EquationSide, DraggableItem, SqrtNode, FractionNode, DroppedSymbol } from '../types';
+import type { EquationSide, DraggableItem, SqrtNode, FractionNode } from '../types';
 import { produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import { ClearIcon, SqrtIcon } from './Icons';
@@ -17,17 +15,24 @@ const getNested = (obj: any, path: (string|number)[]) => {
     return path.reduce((acc, part) => acc && acc[part], obj);
 };
 
-// Forward declaration for recursive use
-let RecursiveDropZone: React.FC<RecursiveDropZoneProps>;
+// Define props interfaces for clarity and for the function signatures
+interface RecursiveDropZoneProps {
+  side: EquationSide;
+  onSideChange: (newSide: EquationSide) => void;
+  parentSide: EquationSide;
+  path: (string | number)[];
+}
 
-// --- EquationItem Component ---
-// Renders a single draggable item (symbol, sqrt, fraction) within a drop zone.
-const EquationItem: React.FC<{
+interface EquationItemProps {
   item: DraggableItem;
   onSideChange: (newSide: EquationSide) => void;
-  parentSide: EquationSide; // The root EquationSide object
-  path: (string | number)[]; // Path to this item from the root
-}> = ({ item, onSideChange, parentSide, path }) => {
+  parentSide: EquationSide;
+  path: (string | number)[];
+}
+
+// Define components as hoisted function declarations to resolve mutual recursion.
+
+function EquationItem({ item, onSideChange, parentSide, path }: EquationItemProps) {
   const [isDragging, setIsDragging] = useState(false);
   const emptySide: EquationSide = { items: [] };
 
@@ -128,16 +133,7 @@ const EquationItem: React.FC<{
   );
 };
 
-// --- RecursiveDropZone Component ---
-// The core drop zone logic, capable of rendering nested drop zones.
-interface RecursiveDropZoneProps {
-  side: EquationSide;
-  onSideChange: (newSide: EquationSide) => void;
-  parentSide: EquationSide;
-  path: (string | number)[];
-}
-
-RecursiveDropZone = ({ side, onSideChange, parentSide, path }: RecursiveDropZoneProps) => {
+function RecursiveDropZone({ side, onSideChange, parentSide, path }: RecursiveDropZoneProps) {
     const [dragOver, setDragOver] = useState(false);
     const [dropIndex, setDropIndex] = useState<number | null>(null);
     const dropZoneRef = useRef<HTMLDivElement>(null);

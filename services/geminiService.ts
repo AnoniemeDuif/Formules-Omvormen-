@@ -83,44 +83,105 @@ interface ValidationResponse {
     explanation: string;
 }
 
+// --- New Local Answer Checking Logic ---
+
+/**
+ * Normalizes one side of a formula string to a canonical form.
+ * - Removes whitespace.
+ * - Recursively normalizes expressions within parentheses and square roots.
+ * - Sorts terms in commutative operations (multiplication) alphabetically.
+ * @param side The string representing one side of the equation.
+ * @returns A normalized string.
+ */
+const normalizeSide = (side: string): string => {
+    let normalized = side.replace(/\s+/g, '');
+
+    // Recursively normalize content within parentheses
+    normalized = normalized.replace(/\(([^()]+)\)/g, (_match, group) => `(${normalizeSide(group)})`);
+
+    // Handle sqrt
+    if (normalized.startsWith('sqrt(') && normalized.endsWith(')')) {
+        const content = normalized.substring(5, normalized.length - 1);
+        return `sqrt(${normalizeSide(content)})`;
+    }
+    
+    // Handle fractions by finding the top-level division operator
+    let parenCount = 0;
+    let divisionIndex = -1;
+    for (let i = 0; i < normalized.length; i++) {
+        if (normalized[i] === '(') parenCount++;
+        else if (normalized[i] === ')') parenCount--;
+        else if (normalized[i] === '/' && parenCount === 0) {
+            divisionIndex = i;
+            break;
+        }
+    }
+    
+    if (divisionIndex !== -1) {
+        const numerator = normalizeSide(normalized.substring(0, divisionIndex));
+        const denominator = normalizeSide(normalized.substring(divisionIndex + 1));
+        return `${numerator}/${denominator}`;
+    }
+    
+    // Normalize commutative multiplication (sort terms)
+    if (normalized.includes('*')) {
+        return normalized.split('*').sort().join('*');
+    }
+
+    return normalized;
+};
+
+/**
+ * Normalizes a full formula string (e.g., "a = F / m") to a canonical form.
+ * @param formula The formula string.
+ * @returns A normalized formula string.
+ */
+const normalizeFormula = (formula: string): string => {
+    const parts = formula.split('=');
+    if (parts.length !== 2) return formula.replace(/\s+/g, ''); // Fallback for invalid format
+
+    const lhs = parts[0].trim();
+    const rhs = normalizeSide(parts[1].trim());
+    
+    return `${lhs}=${rhs}`;
+};
+
+/**
+ * Checks the user's answer against the correct answer locally, without an API call.
+ * It normalizes both formulas to account for different but mathematically equivalent arrangements.
+ * @param problem The physics problem object.
+ * @param userAnswer The user's submitted formula string.
+ * @returns A promise resolving to a validation response.
+ */
 export const checkAnswer = async (problem: Problem, userAnswer: string): Promise<ValidationResponse> => {
     try {
-        const response = await fetch('/api/checkAnswer', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ problem, userAnswer }),
-        });
+        const normalizedUserAnswer = normalizeFormula(userAnswer);
+        const normalizedCorrectAnswer = normalizeFormula(problem.correctAnswer);
 
-        if (!response.ok) {
-            // Probeer een foutmelding van de backend te parsen, anders gebruik een generiek bericht
-            let errorMessage = `Serverfout: ${response.status} ${response.statusText}`;
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorMessage;
-            } catch (e) {
-                // Negeer als het antwoord geen JSON is
-            }
-            throw new Error(errorMessage);
+        const isCorrect = normalizedUserAnswer === normalizedCorrectAnswer;
+
+        if (isCorrect) {
+            return {
+                isCorrect: true,
+                explanation: 'Goed gedaan! De formule is correct omgevormd.'
+            };
+        } else {
+            // Log for debugging purposes if the answer is incorrect
+            console.warn("Answer check failed:", {
+                userAnswer: { raw: userAnswer, normalized: normalizedUserAnswer },
+                correctAnswer: { raw: problem.correctAnswer, normalized: normalizedCorrectAnswer }
+            });
+
+            return {
+                isCorrect: false,
+                explanation: 'Dat is niet helemaal juist. Controleer de algebraïsche stappen nog eens. Let goed op de volgorde van de bewerkingen en of alle variabelen aan de juiste kant staan.'
+            };
         }
-
-        return await response.json() as ValidationResponse;
-
     } catch (error) {
-        console.error("Error checking answer via API:", error);
-        
-        let displayMessage = "Er is een fout opgetreden bij het controleren van je antwoord. Controleer je internetverbinding en probeer het opnieuw.";
-        if (error instanceof Error && error.message.startsWith('Serverfout:')) {
-            displayMessage = `Kon de server niet bereiken om het antwoord te controleren. (${error.message})`;
-        } else if (error instanceof Error) {
-            // Voorkom het tonen van te technische meldingen zoals 'Failed to fetch'
-            displayMessage = "Communicatiefout met de server. Probeer het later opnieuw.";
-        }
-        
+        console.error("Error during local answer validation:", error);
         return {
             isCorrect: false,
-            explanation: displayMessage
+            explanation: "Er is een onverwachte fout opgetreden bij het controleren van je antwoord. Probeer het opnieuw."
         };
     }
 };

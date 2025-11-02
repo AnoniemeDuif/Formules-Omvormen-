@@ -43,6 +43,11 @@ const renderTerm = (term: string, highlight?: string): React.ReactElement[] => {
 
 
 const renderSide = (side: string, highlight?: string): React.ReactElement => {
+    // Defensive check: Ensure side is a string to prevent runtime errors.
+    if (typeof side !== 'string') {
+        return <></>; 
+    }
+    
     side = side.trim();
     
     // Handle square roots, e.g., sqrt(...)
@@ -97,6 +102,10 @@ const renderSide = (side: string, highlight?: string): React.ReactElement => {
 
 
 const FormulaRendererComponent: React.FC<{ formula: string; highlight?: string }> = ({ formula, highlight }) => {
+  // Defensive check for formula prop
+  if (typeof formula !== 'string') {
+    return null;
+  }
   const parts = formula.split('=');
   const lhs = parts[0].trim();
   const rhs = parts.length > 1 ? parts[1].trim() : '';

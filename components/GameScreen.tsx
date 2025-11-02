@@ -308,7 +308,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameMode, quarks, setQuarks, on
             <div className="text-center p-4 bg-slate-900 rounded-lg border-2 border-cyan-500">
                 <p className="text-slate-300 text-lg mb-2">Vorm de formule om voor de gemarkeerde grootheid:</p>
                 <div className="text-3xl font-bold text-cyan-400 font-orbitron mt-2 flex items-center justify-center gap-2 flex-wrap">
-                    <FormulaRenderer formula={problem.originalFormula} highlight={problem.targetVariable} />
+                    {problem && typeof problem.originalFormula === 'string' && (
+                      <FormulaRenderer formula={problem.originalFormula} highlight={problem.targetVariable} />
+                    )}
                 </div>
             </div>
             <div className="flex-grow flex flex-col md:flex-row items-center justify-center gap-4">
@@ -379,7 +381,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ gameMode, quarks, setQuarks, on
                     <div className="text-center">
                         <h2 className="text-3xl font-bold font-orbitron mb-4 text-cyan-300">De Correcte Oplossing</h2>
                         <div className="bg-slate-900/50 p-4 rounded-lg text-2xl text-center flex justify-center items-center">
-                            {problem && <FormulaRenderer formula={problem.correctAnswer} />}
+                            {problem && typeof problem.correctAnswer === 'string' && <FormulaRenderer formula={problem.correctAnswer} />}
                         </div>
                         <div className="mt-6">
                             <button onClick={handleProceedClick} className="flex items-center mx-auto gap-2 px-6 py-2 bg-cyan-500 text-slate-900 font-bold rounded-lg hover:bg-cyan-400 transition-colors"><NextIcon /> Volgende Opgave</button>

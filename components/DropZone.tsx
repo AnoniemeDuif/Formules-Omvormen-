@@ -5,41 +5,62 @@ import { v4 as uuidv4 } from 'uuid';
 import { ClearIcon, SqrtIcon } from './Icons';
 import { playDrop } from '../services/soundService';
 
-// A visual indicator for the drop position
+// --- HELPER FUNCTIONS ---
+
+/** A visual indicator showing where a dragged item will be dropped. */
 const DropIndicator: React.FC = () => (
     <div className="self-stretch w-1 h-10 bg-cyan-400 rounded-full mx-1 animate-pulse" />
 );
 
-// Helper function to get a nested property from an object using a path array
-const getNested = (obj: any, path: (string|number)[]) => {
-    return path.reduce((acc, part) => acc && acc[part], obj);
+/**
+ * Safely traverses a nested object using a path array (e.g., ['content', 'items', 0]).
+ * @returns The value at the nested path, or undefined if the path is invalid.
+ */
+const getNested = (obj: any, path: (string | number)[]): any | undefined => {
+  let current = obj;
+  for (const key of path) {
+    if (current === null || typeof current !== 'object') {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
 };
 
-// Define props interfaces for clarity and for the function signatures
+// --- PROPS INTERFACES ---
+
 interface RecursiveDropZoneProps {
   side: EquationSide;
   onSideChange: (newSide: EquationSide) => void;
-  parentSide: EquationSide;
+  rootSide: EquationSide;
   path: (string | number)[];
 }
 
 interface EquationItemProps {
   item: DraggableItem;
   onSideChange: (newSide: EquationSide) => void;
-  parentSide: EquationSide;
+  rootSide: EquationSide;
   path: (string | number)[];
 }
 
-// Define components as hoisted function declarations to resolve mutual recursion.
+// --- CORE RECURSIVE COMPONENTS ---
+// These two components call each other, forming a recursive structure.
+// They are defined as hoisted `function` declarations, so they can be referenced
+// by each other regardless of their order in the code. This is crucial to prevent
+// "used before defined" errors that can crash the application on startup.
 
-function EquationItem({ item, onSideChange, parentSide, path }: EquationItemProps) {
+/**
+ * Renders a single draggable item within the equation.
+ * If the item is a container (like a square root or fraction), it will
+ * recursively render a `RecursiveDropZone` for its content.
+ */
+function EquationItem({ item, onSideChange, rootSide, path }: EquationItemProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const emptySide: EquationSide = { items: [] };
 
-  // Removes the item from the formula
+  /** Removes this item from the equation tree. */
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const newRootSide = produce(parentSide, draft => {
+    const newRootSide = produce(rootSide, draft => {
         const containerPath = path.slice(0, -1);
         const container = getNested(draft, containerPath);
         const index = path[path.length - 1] as number;
@@ -50,13 +71,11 @@ function EquationItem({ item, onSideChange, parentSide, path }: EquationItemProp
     onSideChange(newRootSide);
   };
 
-  // Handles the start of a drag operation for reordering
+  /** Handles the start of a drag operation for reordering within the equation. */
   const handleDragStart = (e: React.DragEvent) => {
     e.stopPropagation();
     setIsDragging(true);
-    e.dataTransfer.setData('application/json', JSON.stringify({
-      sourcePath: path,
-    }));
+    e.dataTransfer.setData('application/json', JSON.stringify({ sourcePath: path }));
     e.currentTarget.classList.add('opacity-30');
   };
 
@@ -66,7 +85,6 @@ function EquationItem({ item, onSideChange, parentSide, path }: EquationItemProp
     e.currentTarget.classList.remove('opacity-30');
   };
   
-  // Renders the specific content based on item type
   const renderContent = () => {
     switch (item.type) {
       case 'symbol':
@@ -79,9 +97,9 @@ function EquationItem({ item, onSideChange, parentSide, path }: EquationItemProp
             <SqrtIcon className="w-8 h-10 text-cyan-400" />
             <div className="border-t-2 border-cyan-400 p-1 min-h-[72px] min-w-[60px]">
               <RecursiveDropZone
-                side={(item as SqrtNode).content || emptySide}
+                side={(item as SqrtNode).content}
                 onSideChange={onSideChange}
-                parentSide={parentSide}
+                rootSide={rootSide}
                 path={[...path, 'content', 'items']}
               />
             </div>
@@ -92,18 +110,18 @@ function EquationItem({ item, onSideChange, parentSide, path }: EquationItemProp
           <div className="flex flex-col items-center justify-center p-1">
             <div className="p-1 min-h-[72px] min-w-[80px]">
               <RecursiveDropZone
-                side={(item as FractionNode).numerator || emptySide}
+                side={(item as FractionNode).numerator}
                 onSideChange={onSideChange}
-                parentSide={parentSide}
+                rootSide={rootSide}
                 path={[...path, 'numerator', 'items']}
               />
             </div>
             <div className="w-full h-[2px] bg-slate-400 my-1"></div>
             <div className="p-1 min-h-[72px] min-w-[80px]">
               <RecursiveDropZone
-                side={(item as FractionNode).denominator || emptySide}
+                side={(item as FractionNode).denominator}
                 onSideChange={onSideChange}
-                parentSide={parentSide}
+                rootSide={rootSide}
                 path={[...path, 'denominator', 'items']}
               />
             </div>
@@ -133,7 +151,11 @@ function EquationItem({ item, onSideChange, parentSide, path }: EquationItemProp
   );
 };
 
-function RecursiveDropZone({ side, onSideChange, parentSide, path }: RecursiveDropZoneProps) {
+/**
+ * Renders a drop target area that can accept new or existing symbols.
+ * It maps over its items and renders an `EquationItem` for each one.
+ */
+function RecursiveDropZone({ side, onSideChange, rootSide, path }: RecursiveDropZoneProps) {
     const [dragOver, setDragOver] = useState(false);
     const [dropIndex, setDropIndex] = useState<number | null>(null);
     const dropZoneRef = useRef<HTMLDivElement>(null);
@@ -141,23 +163,16 @@ function RecursiveDropZone({ side, onSideChange, parentSide, path }: RecursiveDr
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
-
         if (!dropZoneRef.current) return;
-        const dropZone = dropZoneRef.current;
-        const children = Array.from(dropZone.children);
-        // Filter only for draggable elements to determine insertion index
-        const draggableChildren = children.filter(
-            (el): el is HTMLElement => el instanceof HTMLElement && el.hasAttribute('draggable')
-        );
+        
+        const draggableChildren = Array.from(dropZoneRef.current.children)
+            .filter((el): el is HTMLElement => el instanceof HTMLElement && el.hasAttribute('draggable'));
+            
         const { clientX } = e;
-
         let newIndex = draggableChildren.length;
-
         for (let i = 0; i < draggableChildren.length; i++) {
-            const child = draggableChildren[i];
-            const rect = child.getBoundingClientRect();
-            const midX = rect.left + rect.width / 2;
-            if (clientX < midX) {
+            const rect = draggableChildren[i].getBoundingClientRect();
+            if (clientX < rect.left + rect.width / 2) {
                 newIndex = i;
                 break;
             }
@@ -172,48 +187,39 @@ function RecursiveDropZone({ side, onSideChange, parentSide, path }: RecursiveDr
         setDragOver(false);
         setDropIndex(null);
 
-        const newIndex = dropIndex ?? side.items.length;
-        
+        const targetIndex = dropIndex ?? side.items.length;
         const reorderData = e.dataTransfer.getData('application/json');
         
-        if (reorderData) { // --- Reordering an existing item ---
+        if (reorderData) { // --- REORDERING an existing item ---
             const { sourcePath } = JSON.parse(reorderData);
-            const newRootSide = produce(parentSide, draft => {
-                // 1. Get and remove item from its original source
-                const sourceContainerPath = sourcePath.slice(0, -1);
-                const sourceContainer = getNested(draft, sourceContainerPath);
-                const sourceIndex = sourcePath[sourcePath.length - 1] as number;
-                
+            const newRootSide = produce(rootSide, draft => {
+                const sourceContainer = getNested(draft, sourcePath.slice(0, -1));
                 if (!Array.isArray(sourceContainer)) return;
-                const [removedItem] = sourceContainer.splice(sourceIndex, 1);
+                
+                const [removedItem] = sourceContainer.splice(sourcePath[sourcePath.length - 1], 1);
                 if (!removedItem) return;
 
-                // 2. Add the removed item to the new target location
                 const targetContainer = getNested(draft, path);
                 if (!Array.isArray(targetContainer)) return;
-                targetContainer.splice(newIndex, 0, removedItem);
+                targetContainer.splice(targetIndex, 0, removedItem);
             });
             onSideChange(newRootSide);
 
-        } else { // --- Adding a new item from the toolbar ---
+        } else { // --- ADDING a new item from the toolbar ---
             const symbol = e.dataTransfer.getData('text/plain');
             let newItem: DraggableItem | null = null;
-            const emptySide = { items: [] };
+            const emptySide: EquationSide = { items: [] };
 
-            if (symbol === '__fraction__') {
-                newItem = { id: uuidv4(), type: 'fraction', numerator: emptySide, denominator: emptySide };
-            } else if (symbol === '__sqrt__') {
-                newItem = { id: uuidv4(), type: 'sqrt', content: emptySide };
-            } else if (symbol) {
-                newItem = { id: uuidv4(), type: 'symbol', content: symbol };
-            }
+            if (symbol === '__fraction__') newItem = { id: uuidv4(), type: 'fraction', numerator: { ...emptySide }, denominator: { ...emptySide } };
+            else if (symbol === '__sqrt__') newItem = { id: uuidv4(), type: 'sqrt', content: { ...emptySide } };
+            else if (symbol) newItem = { id: uuidv4(), type: 'symbol', content: symbol };
             
             if (newItem) {
-                const finalNewItem = newItem;
-                const newRootSide = produce(parentSide, draft => {
+                const finalNewItem = newItem; // To satisfy TypeScript closure rules
+                const newRootSide = produce(rootSide, draft => {
                     const targetContainer = getNested(draft, path);
                     if (Array.isArray(targetContainer)) {
-                        targetContainer.splice(newIndex, 0, finalNewItem);
+                        targetContainer.splice(targetIndex, 0, finalNewItem);
                     }
                 });
                 onSideChange(newRootSide);
@@ -230,16 +236,15 @@ function RecursiveDropZone({ side, onSideChange, parentSide, path }: RecursiveDr
             onDrop={handleDrop}
             className={`flex-grow h-full w-full flex flex-wrap items-center justify-center gap-1 p-2 rounded-lg border-2 transition-colors duration-300 ${dragOver ? 'border-cyan-400 bg-slate-800/50' : 'border-dashed border-slate-600'}`}
         >
-            {side.items.length === 0 && !dragOver && (
-                <span className="text-slate-500 pointer-events-none">Sleep hier</span>
-            )}
+            {side.items.length === 0 && !dragOver && <span className="text-slate-500 pointer-events-none">Sleep hier</span>}
+            
             {side.items.map((item, index) => (
                 <React.Fragment key={item.id}>
                     {dropIndex === index && <DropIndicator />}
                     <EquationItem
                         item={item}
                         onSideChange={onSideChange}
-                        parentSide={parentSide}
+                        rootSide={rootSide}
                         path={[...path, index]}
                     />
                 </React.Fragment>
@@ -249,23 +254,26 @@ function RecursiveDropZone({ side, onSideChange, parentSide, path }: RecursiveDr
     );
 };
 
+// --- MAIN EXPORTED COMPONENT ---
 
-// --- DropZone Component ---
-// The main component wrapper exposed to the rest of the app.
 interface DropZoneProps {
   side: EquationSide;
   onSideChange: (newSide: EquationSide) => void;
-  isClearable: boolean;
+  isClearable: boolean; // Prop is kept for potential future use, though not currently used.
 }
 
+/**
+ * The main DropZone component. It acts as the entry point for the recursive
+ * formula editor, setting up the initial state for the recursive components.
+ */
 const DropZone: React.FC<DropZoneProps> = ({ side, onSideChange }) => {
   return (
     <div className="flex flex-col items-stretch justify-center h-full w-full bg-slate-900/70 p-2 rounded-xl">
       <RecursiveDropZone 
         side={side}
         onSideChange={onSideChange}
-        parentSide={side}
-        path={['items']}
+        rootSide={side} // The root of the state tree is the side itself
+        path={['items']}   // The initial path points to the items array of the root side
       />
     </div>
   );

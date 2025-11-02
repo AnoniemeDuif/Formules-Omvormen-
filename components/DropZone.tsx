@@ -3,7 +3,6 @@ import type { EquationSide, DraggableItem, SqrtNode, FractionNode } from '../typ
 import { produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import { ClearIcon, SqrtIcon } from './Icons';
-import { playDrop } from '../services/soundService';
 
 // --- HELPER FUNCTIONS ---
 
@@ -183,7 +182,6 @@ function RecursiveDropZone({ side, onSideChange, rootSide, path }: RecursiveDrop
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
-        playDrop();
         setDragOver(false);
         setDropIndex(null);
 

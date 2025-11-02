@@ -1,5 +1,8 @@
 // This file defines the core data structures used throughout the application.
 
+// Fix: Export the GameMode type to be used in StartScreen.tsx
+export type GameMode = 'classic' | 'streak';
+
 // Represents a single physics problem for the student to solve.
 export interface Problem {
   originalFormula: string; // e.g., "F = m * a"
@@ -17,7 +20,7 @@ export interface DroppedSymbol {
 
 // Represents a square root, which contains a nested equation structure.
 export interface SqrtNode {
-  id: string;
+  id:string;
   type: 'sqrt';
   content: EquationSide;
 }
@@ -38,6 +41,3 @@ export type DraggableItem = DroppedSymbol | SqrtNode | FractionNode;
 export interface EquationSide {
   items: DraggableItem[];
 }
-
-// Defines the two available game modes in the application.
-export type GameMode = 'classic' | 'streak';

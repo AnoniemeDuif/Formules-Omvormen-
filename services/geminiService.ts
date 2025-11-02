@@ -8,8 +8,8 @@ import type { Problem } from '../types';
 // show a proper error message instead of a blank screen.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// --- Predefined data for Level 1 ---
-const LEVEL_1_FORMULAS = [
+// --- Predefined data for Problems ---
+const PREDEFINED_FORMULAS = [
     { formula: 'θ = s / r', variables: ['θ', 's', 'r'] },
     { formula: 'a = r * α', variables: ['a', 'r', 'α'] },
     { formula: 'Fz = m * g', variables: ['Fz', 'm', 'g'] },
@@ -23,7 +23,7 @@ const LEVEL_1_FORMULAS = [
     { formula: 'ρ = m / v', variables: ['ρ', 'm', 'v'] },
 ];
 
-const LEVEL_1_PRECOMPUTED_ANSWERS: { [key: string]: { [key: string]: string } } = {
+const PRECOMPUTED_ANSWERS: { [key: string]: { [key: string]: string } } = {
     'θ = s / r': { s: 's = θ * r', r: 'r = s / θ' },
     'a = r * α': { r: 'r = a / α', α: 'α = a / r' },
     'Fz = m * g': { m: 'm = Fz / g', g: 'g = Fz / m' },
@@ -36,105 +36,54 @@ const LEVEL_1_PRECOMPUTED_ANSWERS: { [key: string]: { [key: string]: string } } 
     'v = Δx / Δt': { 'Δx': 'Δx = v * Δt', 'Δt': 'Δt = Δx / v' },
     'ρ = m / v': { m: 'm = ρ * v', v: 'v = m / ρ' },
 };
-// --- End of Level 1 data ---
+// --- End of Predefined data ---
 
-const generateProblemFromGemini = async (level: number): Promise<Problem | null> => {
-    const prompt = `
-      Genereer een probleem voor het omvormen van een natuurkundige formule voor een leerspel, moeilijkheidsgraad ${level}.
-      De formule moet geschikt zijn voor een middelbare scholier.
-      Level 1: Simpele lineaire formules (bv. F=ma, v=d/t).
-      Level 2: Formules met kwadraten of meerdere termen (bv. E = 1/2 * m * v^2, v = v0 + a*t).
-      Level 3: Complexere formules, eventueel met wortels of meerdere stappen (bv. T = 2 * pi * sqrt(L/g)).
-
-      Geef de originele formule, de variabele om naar om te vormen, en een lijst van alle unieke symbolen (variabelen, operatoren, getallen) die in de correct omgevormde formule nodig zijn. Voeg ook de correct omgevormde formule toe.
-      Gebruik 'sqrt()' voor wortels en '^2' voor kwadraten. Splits getallen en variabelen. Bv. '1/2' wordt '0.5'. '2*pi' wordt '2', '*', 'pi'.
-
-      Geef de output als een JSON-object.
-    `;
-
+export const getPhysicsProblem = (): Problem => {
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        originalFormula: { type: Type.STRING },
-                        targetVariable: { type: Type.STRING },
-                        correctAnswer: { type: Type.STRING },
-                        symbols: {
-                            type: Type.ARRAY,
-                            items: { type: Type.STRING },
-                        },
-                    },
-                    required: ["originalFormula", "targetVariable", "correctAnswer", "symbols"],
-                }
-            }
-        });
+        const randomFormulaData = PREDEFINED_FORMULAS[Math.floor(Math.random() * PREDEFINED_FORMULAS.length)];
+        const { formula, variables } = randomFormulaData;
 
-        const jsonString = response.text.trim();
-        const problemData = JSON.parse(jsonString) as Problem;
+        const solvedVariable = formula.split('=')[0].trim();
+        const possibleTargets = variables.filter(v => v !== solvedVariable);
         
-        const standardSymbols = ['+', '-', '*', '(', ')', '__square__', '__sqrt__', '__fraction__'];
-        const geminiSymbols = problemData.symbols.map(s => s === '^2' ? '__square__' : s);
-        const combinedSymbols = [...new Set([...geminiSymbols, ...standardSymbols])];
-        
-        return { ...problemData, symbols: combinedSymbols };
-    } catch (error) {
-        console.error(`Error fetching level ${level} physics problem from Gemini:`, error);
-        return null;
-    }
-};
-
-
-export const getPhysicsProblem = async (level: number): Promise<Problem | null> => {
-    if (level === 1) {
-        try {
-            const randomFormulaData = LEVEL_1_FORMULAS[Math.floor(Math.random() * LEVEL_1_FORMULAS.length)];
-            const { formula, variables } = randomFormulaData;
-
-            const solvedVariable = formula.split('=')[0].trim();
-            const possibleTargets = variables.filter(v => v !== solvedVariable);
-            
-            if (possibleTargets.length === 0) {
-                throw new Error(`No possible rearrangement targets for formula: ${formula}`);
-            }
-            
-            const targetVariable = possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
-            
-            const correctAnswer = LEVEL_1_PRECOMPUTED_ANSWERS[formula]?.[targetVariable];
-            if (!correctAnswer) {
-                throw new Error(`No precomputed answer for ${formula} -> ${targetVariable}`);
-            }
-
-            const standardSymbols = ['+', '-', '*', '(', ')', '__square__', '__sqrt__', '__fraction__'];
-            let combinedSymbols = [...new Set([...variables, ...standardSymbols])];
-
-            // If the formula or any possible answer contains a square, ensure the square symbol is available.
-            const hasSquare = formula.includes('^2') || Object.values(LEVEL_1_PRECOMPUTED_ANSWERS[formula] || {}).some(ans => ans.includes('^2'));
-            if (hasSquare && !combinedSymbols.includes('__square__')) {
-                combinedSymbols.push('__square__');
-            }
-            combinedSymbols = combinedSymbols.filter(s => s !== '^2');
-
-
-            const problem: Problem = {
-                originalFormula: formula,
-                targetVariable,
-                correctAnswer,
-                symbols: combinedSymbols,
-            };
-            return Promise.resolve(problem);
-        } catch (error) {
-            console.error("Error generating level 1 problem locally, falling back to Gemini:", error);
-            return generateProblemFromGemini(level); // Fallback to Gemini in case of an unexpected error
+        if (possibleTargets.length === 0) {
+            throw new Error(`No possible rearrangement targets for formula: ${formula}`);
         }
+        
+        const targetVariable = possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
+        
+        const correctAnswer = PRECOMPUTED_ANSWERS[formula]?.[targetVariable];
+        if (!correctAnswer) {
+            throw new Error(`No precomputed answer for ${formula} -> ${targetVariable}`);
+        }
+
+        const standardSymbols = ['+', '-', '*', '(', ')', '__square__', '__sqrt__', '__fraction__'];
+        let combinedSymbols = [...new Set([...variables, ...standardSymbols])];
+
+        const hasSquare = formula.includes('^2') || Object.values(PRECOMPUTED_ANSWERS[formula] || {}).some(ans => ans.includes('^2'));
+        if (hasSquare && !combinedSymbols.includes('__square__')) {
+            combinedSymbols.push('__square__');
+        }
+        combinedSymbols = combinedSymbols.filter(s => s !== '^2');
+
+
+        const problem: Problem = {
+            originalFormula: formula,
+            targetVariable,
+            correctAnswer,
+            symbols: combinedSymbols,
+        };
+        return problem;
+    } catch (error) {
+        console.error("Error generating problem locally:", error);
+        // Provide a fallback problem to prevent the app from crashing
+        return {
+            originalFormula: 'F = m * a',
+            targetVariable: 'a',
+            correctAnswer: 'a = F / m',
+            symbols: ['F', 'm', 'a', '*', '/', '+', '-', '(', ')', '__square__', '__sqrt__', '__fraction__'],
+        };
     }
-    
-    // For levels 2 and 3, use Gemini
-    return generateProblemFromGemini(level);
 };
 
 interface ValidationResponse {

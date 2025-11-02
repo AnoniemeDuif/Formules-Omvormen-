@@ -1,6 +1,5 @@
 import React from 'react';
 import { SqrtIcon } from './Icons';
-import { playClick } from '../services/soundService';
 
 interface DraggableSymbolProps {
   symbol: string;
@@ -8,7 +7,6 @@ interface DraggableSymbolProps {
 
 const DraggableSymbol: React.FC<DraggableSymbolProps> = ({ symbol }) => {
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    playClick();
     e.dataTransfer.setData('text/plain', symbol);
     e.currentTarget.classList.add('opacity-50', 'scale-125');
   };

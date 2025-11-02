@@ -1,13 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Problem } from '../types';
 
-// The check for process.env.API_KEY was removed. It caused a crash on deployment
-// to environments like Vercel where `process` is not defined in the browser.
-// By removing the check, the app can load. The @google/genai SDK will handle
-// a missing API key gracefully when an API call is made, allowing the UI to
-// show a proper error message instead of a blank screen.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // --- Predefined data for Problems ---
 const PREDEFINED_FORMULAS = [
     { formula: 'θ = s / r', variables: ['θ', 's', 'r'] },
@@ -92,6 +85,10 @@ interface ValidationResponse {
 }
 
 export const checkAnswer = async (problem: Problem, userAnswer: string): Promise<ValidationResponse> => {
+    // Initialiseer de Gemini client hier om opstartproblemen in de browser te voorkomen.
+    // Dit zorgt ervoor dat de API key pas wordt gelezen op het moment van de API-call.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const prompt = `
       Je bent een natuurkundeleraar. Evalueer de poging van een student om een formule om te vormen.
 

@@ -1,8 +1,9 @@
 
+
 import React, { useState, useRef } from 'react';
 import type { EquationSide, DraggableItem, SqrtNode, FractionNode, DroppedSymbol } from '../types';
-import { produce } from 'https://esm.sh/immer@10.1.1';
-import { v4 as uuidv4 } from 'https://esm.sh/uuid@9.0.1';
+import { produce } from 'immer';
+import { v4 as uuidv4 } from 'uuid';
 import { ClearIcon, SqrtIcon } from './Icons';
 import { playDrop } from '../services/soundService';
 

@@ -1,10 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { Problem } from '../types';
 
-if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
-
+// The check for process.env.API_KEY was removed. It caused a crash on deployment
+// to environments like Vercel where `process` is not defined in the browser.
+// By removing the check, the app can load. The @google/genai SDK will handle
+// a missing API key gracefully when an API call is made, allowing the UI to
+// show a proper error message instead of a blank screen.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- Predefined data for Level 1 ---

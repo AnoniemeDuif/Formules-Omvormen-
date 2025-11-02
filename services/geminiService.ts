@@ -1,4 +1,3 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import type { Problem } from '../types';
 
 // --- Predefined data for Problems ---
@@ -85,52 +84,43 @@ interface ValidationResponse {
 }
 
 export const checkAnswer = async (problem: Problem, userAnswer: string): Promise<ValidationResponse> => {
-    // Initialiseer de Gemini client hier om opstartproblemen in de browser te voorkomen.
-    // Dit zorgt ervoor dat de API key pas wordt gelezen op het moment van de API-call.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    const prompt = `
-      Je bent een natuurkundeleraar. Evalueer de poging van een student om een formule om te vormen.
-
-      Originele Formule: ${problem.originalFormula}
-      Doelvariabele: ${problem.targetVariable}
-      Correct Antwoord: ${problem.correctAnswer}
-      Antwoord van student: ${userAnswer}
-
-      Is het antwoord van de student wiskundig equivalent aan het correcte antwoord? Houd rekening met commutativiteit (a*b = b*a) en de inhoud van wortels (sqrt).
-      
-      Als het antwoord fout is, geef dan een **zeer korte, algemene hint** van één zin die de leerling helpt de volgende stap te zetten, gebaseerd op de theorie.
-      Focus op de algemene regel, niet op de specifieke getallen of variabelen.
-      Bijvoorbeeld: "Denk eraan om eerst de termen zonder de doelvariabele weg te werken." of "Hoe werk je een deling weg om de variabele te isoleren?".
-      Geef GEEN stappenplan en GEEN specifieke oplossing in de uitleg. De uitleg (explanation) is alleen deze hint.
-
-      Geef de output als een JSON-object.
-    `;
-
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        isCorrect: { type: Type.BOOLEAN },
-                        explanation: { type: Type.STRING },
-                    },
-                    required: ["isCorrect", "explanation"],
-                }
-            }
+        const response = await fetch('/api/checkAnswer', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ problem, userAnswer }),
         });
-        
-        const jsonString = response.text.trim();
-        return JSON.parse(jsonString) as ValidationResponse;
+
+        if (!response.ok) {
+            // Probeer een foutmelding van de backend te parsen, anders gebruik een generiek bericht
+            let errorMessage = `Serverfout: ${response.status} ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+            } catch (e) {
+                // Negeer als het antwoord geen JSON is
+            }
+            throw new Error(errorMessage);
+        }
+
+        return await response.json() as ValidationResponse;
+
     } catch (error) {
-        console.error("Error checking answer with Gemini:", error);
+        console.error("Error checking answer via API:", error);
+        
+        let displayMessage = "Er is een fout opgetreden bij het controleren van je antwoord. Controleer je internetverbinding en probeer het opnieuw.";
+        if (error instanceof Error && error.message.startsWith('Serverfout:')) {
+            displayMessage = `Kon de server niet bereiken om het antwoord te controleren. (${error.message})`;
+        } else if (error instanceof Error) {
+            // Voorkom het tonen van te technische meldingen zoals 'Failed to fetch'
+            displayMessage = "Communicatiefout met de server. Probeer het later opnieuw.";
+        }
+        
         return {
             isCorrect: false,
-            explanation: "Er is een fout opgetreden bij het controleren van je antwoord. Probeer het opnieuw."
+            explanation: displayMessage
         };
     }
 };

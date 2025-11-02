@@ -217,67 +217,38 @@ interface ValidationResponse {
     explanation: string;
 }
 
-const normalizeSide = (side: string): string => {
-    let normalized = side.replace(/\s+/g, '');
-    normalized = normalized.replace(/\(([^()]+)\)/g, (_match, group) => `(${normalizeSide(group)})`);
-    if (normalized.startsWith('sqrt(') && normalized.endsWith(')')) {
-        const content = normalized.substring(5, normalized.length - 1);
-        return `sqrt(${normalizeSide(content)})`;
-    }
-    let parenCount = 0;
-    let divisionIndex = -1;
-    for (let i = 0; i < normalized.length; i++) {
-        if (normalized[i] === '(') parenCount++;
-        else if (normalized[i] === ')') parenCount--;
-        else if (normalized[i] === '/' && parenCount === 0) {
-            divisionIndex = i;
-            break;
-        }
-    }
-    if (divisionIndex !== -1) {
-        const numerator = normalizeSide(normalized.substring(0, divisionIndex));
-        const denominator = normalizeSide(normalized.substring(divisionIndex + 1));
-        return `${numerator}/${denominator}`;
-    }
-    if (normalized.includes('*')) {
-        return normalized.split('*').sort().join('*');
-    }
-    return normalized;
-};
-
-const normalizeFormula = (formula: string): string => {
-    const parts = formula.split('=');
-    if (parts.length !== 2) return formula.replace(/\s+/g, '');
-    const lhs = parts[0].trim();
-    const rhs = normalizeSide(parts[1].trim());
-    return `${lhs}=${rhs}`;
-};
-
 const checkAnswer = async (problem: Problem, userAnswer: string): Promise<ValidationResponse> => {
     try {
-        const normalizedUserAnswer = normalizeFormula(userAnswer);
-        const normalizedCorrectAnswer = normalizeFormula(problem.correctAnswer);
-        const isCorrect = normalizedUserAnswer === normalizedCorrectAnswer;
-        if (isCorrect) {
-            return {
-                isCorrect: true,
-                explanation: 'Goed gedaan! De formule is correct omgevormd.'
-            };
-        } else {
-            console.warn("Answer check failed:", {
-                userAnswer: { raw: userAnswer, normalized: normalizedUserAnswer },
-                correctAnswer: { raw: problem.correctAnswer, normalized: normalizedCorrectAnswer }
-            });
-            return {
-                isCorrect: false,
-                explanation: 'Dat is niet helemaal juist. Controleer de algebraïsche stappen nog eens. Let goed op de volgorde van de bewerkingen en of alle variabelen aan de juiste kant staan.'
-            };
+        const response = await fetch('/api/checkAnswer', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ problem, userAnswer }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Fout bij het parsen van de fout-response.' }));
+            console.error("API Error Response:", errorData);
+            throw new Error(`Serverfout: ${response.status} - ${errorData.error || response.statusText}`);
         }
+
+        const result: ValidationResponse = await response.json();
+        
+        if (result.isCorrect) {
+            playSuccess();
+        } else {
+            playError();
+        }
+        
+        return result;
+
     } catch (error) {
-        console.error("Error during local answer validation:", error);
+        console.error("Fout bij het aanroepen van de checkAnswer API:", error);
+        playError();
         return {
             isCorrect: false,
-            explanation: "Er is een onverwachte fout opgetreden bij het controleren van je antwoord. Probeer het opnieuw."
+            explanation: "Het is niet gelukt om het antwoord te controleren. Controleer je internetverbinding en probeer het opnieuw."
         };
     }
 };
@@ -635,6 +606,7 @@ function RecursiveDropZone({ side, onSideChange, rootSide, path }: RecursiveDrop
         e.stopPropagation();
         setDragOver(false);
         setDropIndex(null);
+        playDrop();
         const targetIndex = dropIndex ?? side.items.length;
         const reorderData = e.dataTransfer.getData('application/json');
         
@@ -758,6 +730,7 @@ const GameScreen: React.FC = () => {
   const handleLeftSideChange = (newSide: EquationSide) => setLeftSide(newSide);
   const handleRightSideChange = (newSide: EquationSide) => setRightSide(newSide);
   const handleReset = useCallback(() => {
+    playReset();
     setLeftSide(emptySide);
     setRightSide(emptySide);
   }, [emptySide]);
